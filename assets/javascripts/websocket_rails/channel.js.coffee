@@ -6,29 +6,29 @@ For instance:
   var awesome_channel = dispatcher.subscribe('awesome_channel');
   awesome_channel.bind('event', function(data) { console.log('channel event!'); });
   awesome_channel.trigger('awesome_event', awesome_object);
-
-If you want to unbind an event, you can use the unbind function :
-  awesome_channel.unbind('event')
 ###
 class WebSocketRails.Channel
 
-  constructor: (@name, @_dispatcher, @is_private = false, @on_success, @on_failure) ->
-    @_callbacks = {}
-    @_token = undefined
-    @_queue = []
+  constructor: (@name, @_dispatcher, @is_private, @on_success, @on_failure) ->
     if @is_private
       event_name = 'websocket_rails.subscribe_private'
     else
       event_name = 'websocket_rails.subscribe'
 
     @connection_id = @_dispatcher._conn?.connection_id
-    event = new WebSocketRails.Event( [event_name, {data: {channel: @name}}, @connection_id], @_success_launcher, @_failure_launcher)
+    event = new WebSocketRails.Event([event_name, {channel: @name}, {connection_id: @connection_id}], @_success_launcher, @_failure_launcher)
     @_dispatcher.trigger_event event
+    @_callbacks = {}
+    @_token = undefined
+    @_queue = []
+
+  is_public: ->
+    !@is_private
 
   destroy: ->
     if @connection_id == @_dispatcher._conn?.connection_id
       event_name = 'websocket_rails.unsubscribe'
-      event =  new WebSocketRails.Event( [event_name, {data: {channel: @name}}, @connection_id] )
+      event =  new WebSocketRails.Event([event_name, {channel: @name}, {connection_id: @connection_id, token: @_token}])
       @_dispatcher.trigger_event event
     @_callbacks = {}
 
@@ -40,7 +40,7 @@ class WebSocketRails.Channel
     delete @_callbacks[event_name]
 
   trigger: (event_name, message) ->
-    event = new WebSocketRails.Event( [event_name, {channel: @name, data: message, token: @_token}, @connection_id] )
+    event = new WebSocketRails.Event([event_name, message, {connection_id: @connection_id, channel: @name, token: @_token}])
     if !@_token
       @_queue.push event
     else
@@ -48,9 +48,10 @@ class WebSocketRails.Channel
 
   dispatch: (event_name, message) ->
     if event_name == 'websocket_rails.channel_token'
-      @connection_id = @_dispatcher._conn?.connection_id
       @_token = message['token']
-      @flush_queue()
+      for event in @_queue
+        @_dispatcher.trigger_event event
+      @_queue = []
     else
       return unless @_callbacks[event_name]?
       for callback in @_callbacks[event_name]
@@ -63,8 +64,3 @@ class WebSocketRails.Channel
   # using this method because @on_failure will not be defined when the constructor is executed
   _failure_launcher: (data) =>
     @on_failure(data) if @on_failure?
-
-  flush_queue: ->
-    for event in @_queue
-      @_dispatcher.trigger_event event
-    @_queue = []

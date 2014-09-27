@@ -1,6 +1,9 @@
 require "bundler/gem_tasks"
 require 'websocket_rails/js/version'
 require "uglifier"
+require 'jasmine'
+
+load 'jasmine/tasks/jasmine.rake'
 
 
 task :build_js_release do

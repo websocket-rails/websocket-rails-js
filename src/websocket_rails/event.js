@@ -5,21 +5,21 @@ The Event object stores all the relevant event information.
 
 (function() {
   WebSocketRails.Event = (function() {
-    function Event(data, success_callback, failure_callback) {
-      var attr;
+    function Event(message, success_callback, failure_callback) {
+      var options;
       this.success_callback = success_callback;
       this.failure_callback = failure_callback;
-      this.name = data[0];
-      attr = data[1];
-      if (attr != null) {
-        this.id = attr['id'] != null ? attr['id'] : ((1 + Math.random()) * 0x10000) | 0;
-        this.channel = attr.channel != null ? attr.channel : void 0;
-        this.data = attr.data != null ? attr.data : attr;
-        this.token = attr.token != null ? attr.token : void 0;
-        this.connection_id = data[2];
-        if (attr.success != null) {
+      this.name = message[0];
+      this.data = message[1];
+      options = message[2];
+      if (options != null) {
+        this.id = options['id'] != null ? options['id'] : ((1 + Math.random()) * 0x10000) | 0;
+        this.channel = options.channel;
+        this.token = options.token;
+        this.connection_id = options.connection_id;
+        if (options.success != null) {
           this.result = true;
-          this.success = attr.success;
+          this.success = options.success;
         }
       }
     }
@@ -37,14 +37,14 @@ The Event object stores all the relevant event information.
     };
 
     Event.prototype.serialize = function() {
-      return JSON.stringify([this.name, this.attributes()]);
+      return JSON.stringify([this.name, this.data, this.meta_data()]);
     };
 
-    Event.prototype.attributes = function() {
+    Event.prototype.meta_data = function() {
       return {
         id: this.id,
+        connection_id: this.connection_id,
         channel: this.channel,
-        data: this.data,
         token: this.token
       };
     };

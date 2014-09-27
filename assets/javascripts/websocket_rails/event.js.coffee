@@ -4,18 +4,19 @@ The Event object stores all the relevant event information.
 
 class WebSocketRails.Event
 
-  constructor: (data, @success_callback, @failure_callback) ->
-    @name    = data[0]
-    attr     = data[1]
-    if attr?
-      @id      = if attr['id']? then attr['id'] else (((1+Math.random())*0x10000)|0)
-      @channel = if attr.channel? then attr.channel
-      @data    = if attr.data? then attr.data else attr
-      @token   = if attr.token? then attr.token
-      @connection_id = data[2]
-      if attr.success?
+  constructor: (message, @success_callback, @failure_callback) ->
+    @name   = message[0]
+    @data   = message[1]
+    options = message[2]
+
+    if options?
+      @id = if options['id']? then options['id'] else (((1+Math.random())*0x10000)|0)
+      @channel = options.channel
+      @token = options.token
+      @connection_id = options.connection_id
+      if options.success?
         @result  = true
-        @success = attr.success
+        @success = options.success
 
   is_channel: ->
     @channel?
@@ -27,12 +28,12 @@ class WebSocketRails.Event
     @name == 'websocket_rails.ping'
 
   serialize: ->
-      JSON.stringify [@name, @attributes()]
+    JSON.stringify [@name, @data, @meta_data()]
 
-  attributes: ->
+  meta_data: ->
     id: @id,
+    connection_id: @connection_id,
     channel: @channel,
-    data: @data
     token: @token
 
   run_callbacks: (@success, @result) ->

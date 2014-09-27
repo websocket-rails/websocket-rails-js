@@ -7,9 +7,6 @@ For instance:
   var awesome_channel = dispatcher.subscribe('awesome_channel');
   awesome_channel.bind('event', function(data) { console.log('channel event!'); });
   awesome_channel.trigger('awesome_event', awesome_object);
-
-If you want to unbind an event, you can use the unbind function :
-  awesome_channel.unbind('event')
  */
 
 (function() {
@@ -20,14 +17,11 @@ If you want to unbind an event, you can use the unbind function :
       var event, event_name, _ref;
       this.name = name;
       this._dispatcher = _dispatcher;
-      this.is_private = is_private != null ? is_private : false;
+      this.is_private = is_private;
       this.on_success = on_success;
       this.on_failure = on_failure;
       this._failure_launcher = __bind(this._failure_launcher, this);
       this._success_launcher = __bind(this._success_launcher, this);
-      this._callbacks = {};
-      this._token = void 0;
-      this._queue = [];
       if (this.is_private) {
         event_name = 'websocket_rails.subscribe_private';
       } else {
@@ -36,13 +30,20 @@ If you want to unbind an event, you can use the unbind function :
       this.connection_id = (_ref = this._dispatcher._conn) != null ? _ref.connection_id : void 0;
       event = new WebSocketRails.Event([
         event_name, {
-          data: {
-            channel: this.name
-          }
-        }, this.connection_id
+          channel: this.name
+        }, {
+          connection_id: this.connection_id
+        }
       ], this._success_launcher, this._failure_launcher);
       this._dispatcher.trigger_event(event);
+      this._callbacks = {};
+      this._token = void 0;
+      this._queue = [];
     }
+
+    Channel.prototype.is_public = function() {
+      return !this.is_private;
+    };
 
     Channel.prototype.destroy = function() {
       var event, event_name, _ref;
@@ -50,10 +51,11 @@ If you want to unbind an event, you can use the unbind function :
         event_name = 'websocket_rails.unsubscribe';
         event = new WebSocketRails.Event([
           event_name, {
-            data: {
-              channel: this.name
-            }
-          }, this.connection_id
+            channel: this.name
+          }, {
+            connection_id: this.connection_id,
+            token: this._token
+          }
         ]);
         this._dispatcher.trigger_event(event);
       }
@@ -75,11 +77,11 @@ If you want to unbind an event, you can use the unbind function :
     Channel.prototype.trigger = function(event_name, message) {
       var event;
       event = new WebSocketRails.Event([
-        event_name, {
+        event_name, message, {
+          connection_id: this.connection_id,
           channel: this.name,
-          data: message,
           token: this._token
-        }, this.connection_id
+        }
       ]);
       if (!this._token) {
         return this._queue.push(event);
@@ -89,19 +91,23 @@ If you want to unbind an event, you can use the unbind function :
     };
 
     Channel.prototype.dispatch = function(event_name, message) {
-      var callback, _i, _len, _ref, _ref1, _results;
+      var callback, event, _i, _j, _len, _len1, _ref, _ref1, _results;
       if (event_name === 'websocket_rails.channel_token') {
-        this.connection_id = (_ref = this._dispatcher._conn) != null ? _ref.connection_id : void 0;
         this._token = message['token'];
-        return this.flush_queue();
+        _ref = this._queue;
+        for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+          event = _ref[_i];
+          this._dispatcher.trigger_event(event);
+        }
+        return this._queue = [];
       } else {
         if (this._callbacks[event_name] == null) {
           return;
         }
         _ref1 = this._callbacks[event_name];
         _results = [];
-        for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
-          callback = _ref1[_i];
+        for (_j = 0, _len1 = _ref1.length; _j < _len1; _j++) {
+          callback = _ref1[_j];
           _results.push(callback(message));
         }
         return _results;
@@ -118,16 +124,6 @@ If you want to unbind an event, you can use the unbind function :
       if (this.on_failure != null) {
         return this.on_failure(data);
       }
-    };
-
-    Channel.prototype.flush_queue = function() {
-      var event, _i, _len, _ref;
-      _ref = this._queue;
-      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        event = _ref[_i];
-        this._dispatcher.trigger_event(event);
-      }
-      return this._queue = [];
     };
 
     return Channel;

@@ -20,7 +20,7 @@ class WebSocketRails.AbstractConnection
     event.connection_id = @connection_id if @connection_id?
 
     # ...
-    
+
   on_close: (event) ->
     if @dispatcher && @dispatcher._conn == @
       close_event = new WebSocketRails.Event(['connection_closed', event])

@@ -31,9 +31,9 @@ class @WebSocketRails
     @state = 'connecting'
 
     unless @supports_websockets() and @use_websockets
-      @_conn = new WebSocketRails.HttpConnection @url, @
+      @_conn = new WebSocketRails.HttpConnection @url, this
     else
-      @_conn = new WebSocketRails.WebSocketConnection @url, @
+      @_conn = new WebSocketRails.WebSocketConnection @url, this
 
     @_conn.new_message = @new_message
 
@@ -45,9 +45,9 @@ class @WebSocketRails
 
     @state     = 'disconnected'
 
-  # Reconnects the whole connection, 
+  # Reconnects the whole connection,
   # keeping the messages queue and its' connected channels.
-  # 
+  #
   # After successfull connection, this will:
   # - reconnect to all channels, that were active while disconnecting
   # - resend all events from which we haven't received any response yet
@@ -65,42 +65,37 @@ class @WebSocketRails
     @reconnect_channels()
 
   new_message: (data) =>
-    for socket_message in data
-      event = new WebSocketRails.Event( socket_message )
-      if event.is_result()
-        @queue[event.id]?.run_callbacks(event.success, event.data)
-        delete @queue[event.id]
-      else if event.is_channel()
-        @dispatch_channel event
-      else if event.is_ping()
-        @pong()
-      else
-        @dispatch event
+    event = new WebSocketRails.Event(data)
+    if event.is_result()
+      @queue[event.id]?.run_callbacks(event.success, event.data)
+      @queue[event.id] = null
+    else if event.is_channel()
+      @dispatch_channel event
+    else
+      @dispatch event
 
-      if @state == 'connecting' and event.name == 'client_connected'
-        @connection_established event.data
+    if @state == 'connecting' and event.name == 'client_connected'
+      @connection_established event
 
-  connection_established: (data) =>
-    @state         = 'connected'
-    @_conn.setConnectionId(data.connection_id)
+  connection_established: (event) =>
+    @state = 'connected'
+    @_conn.setConnectionId(event.connection_id)
     @_conn.flush_queue()
     if @on_open?
-      @on_open(data)
+      @on_open(event.data)
 
   bind: (event_name, callback) =>
     @callbacks[event_name] ?= []
     @callbacks[event_name].push callback
 
-  unbind: (event_name) =>
-    delete @callbacks[event_name]
-
   trigger: (event_name, data, success_callback, failure_callback) =>
-    event = new WebSocketRails.Event( [event_name, data, @_conn?.connection_id], success_callback, failure_callback )
-    @trigger_event event
+    event = new WebSocketRails.Event([event_name, data, {connection_id: @connection_id}], success_callback, failure_callback)
+    @queue[event.id] = event
+    @_conn.trigger event
 
   trigger_event: (event) =>
     @queue[event.id] ?= event # Prevent replacing an event that has callbacks stored
-    @_conn.trigger event if @_conn
+    @_conn.trigger event
     event
 
   dispatch: (event) =>
@@ -136,14 +131,9 @@ class @WebSocketRails
   supports_websockets: =>
     (typeof(WebSocket) == "function" or typeof(WebSocket) == "object")
 
-  pong: =>
-    pong = new WebSocketRails.Event( ['websocket_rails.pong', {}, @_conn?.connection_id] )
-    @_conn.trigger pong
-
   connection_stale: =>
     @state != 'connected'
 
-  # Destroy and resubscribe to all existing @channels.
   reconnect_channels: ->
     for name, channel of @channels
       callbacks = channel._callbacks

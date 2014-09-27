@@ -29,7 +29,6 @@ Stop listening for new events from the server
       this.url = url;
       this.use_websockets = use_websockets != null ? use_websockets : true;
       this.connection_stale = __bind(this.connection_stale, this);
-      this.pong = __bind(this.pong, this);
       this.supports_websockets = __bind(this.supports_websockets, this);
       this.dispatch_channel = __bind(this.dispatch_channel, this);
       this.unsubscribe = __bind(this.unsubscribe, this);
@@ -38,7 +37,6 @@ Stop listening for new events from the server
       this.dispatch = __bind(this.dispatch, this);
       this.trigger_event = __bind(this.trigger_event, this);
       this.trigger = __bind(this.trigger, this);
-      this.unbind = __bind(this.unbind, this);
       this.bind = __bind(this.bind, this);
       this.connection_established = __bind(this.connection_established, this);
       this.new_message = __bind(this.new_message, this);
@@ -84,38 +82,29 @@ Stop listening for new events from the server
     };
 
     WebSocketRails.prototype.new_message = function(data) {
-      var event, socket_message, _i, _len, _ref, _results;
-      _results = [];
-      for (_i = 0, _len = data.length; _i < _len; _i++) {
-        socket_message = data[_i];
-        event = new WebSocketRails.Event(socket_message);
-        if (event.is_result()) {
-          if ((_ref = this.queue[event.id]) != null) {
-            _ref.run_callbacks(event.success, event.data);
-          }
-          delete this.queue[event.id];
-        } else if (event.is_channel()) {
-          this.dispatch_channel(event);
-        } else if (event.is_ping()) {
-          this.pong();
-        } else {
-          this.dispatch(event);
+      var event, _ref;
+      event = new WebSocketRails.Event(data);
+      if (event.is_result()) {
+        if ((_ref = this.queue[event.id]) != null) {
+          _ref.run_callbacks(event.success, event.data);
         }
-        if (this.state === 'connecting' && event.name === 'client_connected') {
-          _results.push(this.connection_established(event.data));
-        } else {
-          _results.push(void 0);
-        }
+        this.queue[event.id] = null;
+      } else if (event.is_channel()) {
+        this.dispatch_channel(event);
+      } else {
+        this.dispatch(event);
       }
-      return _results;
+      if (this.state === 'connecting' && event.name === 'client_connected') {
+        return this.connection_established(event);
+      }
     };
 
-    WebSocketRails.prototype.connection_established = function(data) {
+    WebSocketRails.prototype.connection_established = function(event) {
       this.state = 'connected';
-      this._conn.setConnectionId(data.connection_id);
+      this._conn.setConnectionId(event.connection_id);
       this._conn.flush_queue();
       if (this.on_open != null) {
-        return this.on_open(data);
+        return this.on_open(event.data);
       }
     };
 
@@ -127,14 +116,15 @@ Stop listening for new events from the server
       return this.callbacks[event_name].push(callback);
     };
 
-    WebSocketRails.prototype.unbind = function(event_name) {
-      return delete this.callbacks[event_name];
-    };
-
     WebSocketRails.prototype.trigger = function(event_name, data, success_callback, failure_callback) {
-      var event, _ref;
-      event = new WebSocketRails.Event([event_name, data, (_ref = this._conn) != null ? _ref.connection_id : void 0], success_callback, failure_callback);
-      return this.trigger_event(event);
+      var event;
+      event = new WebSocketRails.Event([
+        event_name, data, {
+          connection_id: this.connection_id
+        }
+      ], success_callback, failure_callback);
+      this.queue[event.id] = event;
+      return this._conn.trigger(event);
     };
 
     WebSocketRails.prototype.trigger_event = function(event) {
@@ -142,9 +132,7 @@ Stop listening for new events from the server
       if ((_base = this.queue)[_name = event.id] == null) {
         _base[_name] = event;
       }
-      if (this._conn) {
-        this._conn.trigger(event);
-      }
+      this._conn.trigger(event);
       return event;
     };
 
@@ -201,12 +189,6 @@ Stop listening for new events from the server
 
     WebSocketRails.prototype.supports_websockets = function() {
       return typeof WebSocket === "function" || typeof WebSocket === "object";
-    };
-
-    WebSocketRails.prototype.pong = function() {
-      var pong, _ref;
-      pong = new WebSocketRails.Event(['websocket_rails.pong', {}, (_ref = this._conn) != null ? _ref.connection_id : void 0]);
-      return this._conn.trigger(pong);
     };
 
     WebSocketRails.prototype.connection_stale = function() {
