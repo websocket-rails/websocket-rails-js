@@ -1,6 +1,8 @@
 # Websocket Rails JavaScript Client
 
-### Work In Progress
+Refer to the [Websocket-Rails
+Wiki](https://github.com/websocket-rails/websocket-rails/wiki) for usage
+instructions.
 
 ## Contributing
 
